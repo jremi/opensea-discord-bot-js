@@ -2,14 +2,12 @@ require("dotenv").config();
 
 const fetch = require("node-fetch");
 const moment = require("moment");
-// const NodeCache = require("node-cache");
 const Discord = require("discord.js");
 const ethers = require("ethers");
 
 const discordClient = new Discord.Client();
 
 let discordChannel;
-
 let lastPollTimeStamp = moment().unix();
 
 discordClient.login(process.env.DISCORD_BOT_TOKEN);
