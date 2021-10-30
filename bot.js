@@ -1,15 +1,16 @@
 require("dotenv").config();
 
 const fetch = require("node-fetch");
-const NodeCache = require("node-cache");
+const moment = require("moment");
+// const NodeCache = require("node-cache");
 const Discord = require("discord.js");
 const ethers = require("ethers");
-
-const openSeaEventsCache = new NodeCache({ stdTTL: 7200 }); // 2 hours
 
 const discordClient = new Discord.Client();
 
 let discordChannel;
+
+let lastPollTimeStamp = moment().unix();
 
 discordClient.login(process.env.DISCORD_BOT_TOKEN);
 
@@ -19,16 +20,45 @@ discordClient.on("ready", async function () {
     process.env.DISCORD_CHANNEL_ID
   );
   console.log(`Discord Bot has started in channel ${discordChannel.name}!`);
+  initPoller();
 });
 
+function initPoller() {
+  setInterval(
+    async () => {
+      if (!discordChannel) return;
+      console.log("\nChecking for new OpenSea sales...");
+      const events = await getOpenSeaEvents().catch((err) =>
+        console.log(`OpenSea:getOpenSeaEvents:err>`, err)
+      );
+
+      if (events && events.asset_events && events.asset_events.length) {
+        console.log(
+          `Congrats! Total new sales: (${events.asset_events.length})`
+        );
+        for (const sale of events.asset_events.reverse()) {
+          const message = buildDiscordMessage(sale);
+          discordChannel
+            .send(message)
+            .catch((err) => console.log("Discord:channel:send:err>", err));
+        }
+      } else {
+        console.log("No OpenSea sales!");
+      }
+      lastPollTimeStamp = moment.unix();
+    },
+    process.env.POLLING_INTERVAL_SECONDS
+      ? parseInt(process.env.POLLING_INTERVAL_SECONDS)
+      : 60000
+  );
+}
+
 const getOpenSeaEvents = async () => {
-  const seconds = process.env.SECONDS ? parseInt(process.env.SECONDS) : 3600;
-  const hoursAgo = Math.round(new Date().getTime() / 1000) - seconds;
   const params = new URLSearchParams({
     offset: "0",
     event_type: "successful",
     only_opensea: "false",
-    occurred_after: hoursAgo.toString(),
+    occurred_after: lastPollTimeStamp,
     collection_slug: process.env.COLLECTION_SLUG,
   });
   return await fetch("https://api.opensea.io/api/v1/events?" + params).then(
@@ -64,34 +94,3 @@ const buildDiscordMessage = (sale) =>
       "Sold on OpenSea",
       "https://files.readme.io/566c72b-opensea-logomark-full-colored.png"
     );
-
-setInterval(
-  async () => {
-    if (!discordChannel) return;
-    const events = await getOpenSeaEvents();
-    if (events && events.asset_events) {
-      for (const sale of events.asset_events.reverse()) {
-        const eventAlreadyCached = openSeaEventsCache.get(sale.id);
-        if (eventAlreadyCached) {
-          console.log(`Sale already cached/posted:`, sale.id, sale.asset.name);
-          continue;
-        }
-        const message = buildDiscordMessage(sale);
-        discordChannel
-          .send(message)
-          .catch((err) =>
-            console.log("Discord:channel:send:msg>", err.message)
-          );
-        openSeaEventsCache.set(sale.id, sale);
-        console.log(
-          `Sale just cached/posted to Discord!`,
-          sale.id,
-          sale.asset.name
-        );
-      }
-    }
-  },
-  process.env.POLLING_INTERVAL_SECONDS
-    ? parseInt(process.env.POLLING_INTERVAL_SECONDS)
-    : 60000
-);
