@@ -43,7 +43,7 @@ function initPoller() {
       } else {
         console.log("No OpenSea sales!");
       }
-      lastPollTimeStamp = moment.unix();
+      lastPollTimeStamp = moment().unix();
     },
     process.env.POLLING_INTERVAL_SECONDS
       ? parseInt(process.env.POLLING_INTERVAL_SECONDS)
@@ -57,6 +57,7 @@ const getOpenSeaEvents = async () => {
     event_type: "successful",
     only_opensea: "false",
     occurred_after: lastPollTimeStamp,
+    limit: 100,
     collection_slug: process.env.COLLECTION_SLUG,
   });
   return await fetch("https://api.opensea.io/api/v1/events?" + params).then(
